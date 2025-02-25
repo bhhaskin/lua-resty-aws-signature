@@ -136,7 +136,6 @@ jobs:
         run: |
           luarocks install lua-cjson --local || luarocks install dkjson --local
           luarocks upload rockspecs/lua-resty-aws-signature-*.rockspec --api-key=${{ secrets.LUAROCKS_API_KEY }}
-          luarocks upload lua-resty-aws-signature-*.rock --api-key=${{ secrets.LUAROCKS_API_KEY }}
 
       ########################################################
       # (13) Attach the .rock & .src.rock to the GitHub Release
