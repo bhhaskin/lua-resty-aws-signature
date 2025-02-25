@@ -146,3 +146,5 @@ jobs:
           files: |
             lua-resty-aws-signature-*.src.rock
             lua-resty-aws-signature-*.rock
+          token: ${{ secrets.GITHUB_TOKEN }}
+          overwrite: true
