@@ -1,4 +1,6 @@
-local _M = {}
+local _M = {
+  _VERSION = '0.2-0'
+}
 
 local hmac = require "resty.openssl.hmac"
 local sha256 = require "resty.openssl.digest"
