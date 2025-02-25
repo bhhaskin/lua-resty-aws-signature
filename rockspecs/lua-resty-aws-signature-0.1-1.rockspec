@@ -1,4 +1,4 @@
-rockspec_format = "3.0"
+rockspec_format = "2.0"
 package = "lua-resty-aws-signature"
 version = "0.1-1"
 source = {
