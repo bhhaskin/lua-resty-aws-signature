@@ -140,17 +140,7 @@ jobs:
       ########################################################
       # (13) Attach the .rock & .src.rock to the GitHub Release
       ########################################################
-      - name: Delete existing release asset (if exists)
-        run: |
-          asset_id=$(gh api repos/${{ github.repository }}/releases/assets --jq '.[] | select(.name == "lua-resty-aws-signature-0.1-1.src.rock") | .id')
-          if [[ ! -z "$asset_id" ]]; then
-            gh api --method DELETE repos/${{ github.repository }}/releases/assets/$asset_id
-            echo "Deleted existing asset"
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload release assets
+      - name: Upload .rock & .src.rock to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
