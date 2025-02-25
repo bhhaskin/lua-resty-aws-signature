@@ -2,7 +2,10 @@ name: Release Workflow
 
 on:
   release:
-    types: [published]
+    types: [published] 
+
+permissions:
+  contents: write
 
 jobs:
   publish:
@@ -12,58 +15,60 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 
+          fetch-depth: 0
 
-      - name: Install LuaRocks
+      - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y luarocks curl
 
-      - name: Extract Version
+      - name: Extract version from tag
         run: |
-          VERSION=${{ github.ref_name }}  # Extracts "v0.1-1"
-          VERSION=${VERSION#v}  # Removes "v" prefix (0.1-1)
+          VERSION=${{ github.event.release.tag_name }}  # e.g., "v0.1-1"
+          VERSION=${VERSION#v}                          # remove the "v" prefix -> "0.1-1"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Get SHA256 of GitHub Release Tarball
+      - name: Compute SHA256 of tarball
         run: |
-          TARBALL_URL="https://github.com/${{ github.repository }}/archive/refs/tags/v${VERSION}.tar.gz"
+          TARBALL_URL="https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.event.release.tag_name }}.tar.gz"
           echo "Downloading tarball from $TARBALL_URL"
           SHA256=$(curl -L "$TARBALL_URL" | sha256sum | awk '{ print $1 }')
           echo "SHA256=$SHA256" >> $GITHUB_ENV
 
-      - name: Update Rockspec with GitHub Release Tarball & SHA256
+      - name: Update rockspec
         run: |
           ROCKSPEC_FILE=$(ls rockspecs/lua-resty-aws-signature-*.rockspec)
-          sed -i "s|url = .*|url = \"https://github.com/${{ github.repository }}/archive/refs/tags/v${VERSION}.tar.gz\",|" "$ROCKSPEC_FILE"
-          sed -i "s|md5 = .*|sha256 = \"$SHA256\",|" "$ROCKSPEC_FILE"
+          # Replace the 'url' and 'sha256' lines
+          sed -i "s|url = .*|url = \"https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.event.release.tag_name }}.tar.gz\",|" "$ROCKSPEC_FILE"
+          sed -i "s|md5 = .*|sha256 = \"$SHA256\",|" "$ROCKSPEC_FILE" || true
+          sed -i "s|sha256 = .*|sha256 = \"$SHA256\",|" "$ROCKSPEC_FILE"
           cat "$ROCKSPEC_FILE"
 
-      - name: Checkout main branch
+      - name: Determine default branch
+        id: branch
         run: |
-          git fetch origin main
-          git checkout main
+          DEFAULT_BRANCH=$(git remote show origin | awk '/HEAD branch/ {print $NF}')
+          echo "DEFAULT_BRANCH=$DEFAULT_BRANCH" >> $GITHUB_ENV
 
-      - name: Commit Updated Rockspec
+      - name: Commit updated rockspec
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout $DEFAULT_BRANCH
           git add rockspecs/lua-resty-aws-signature-*.rockspec
-          git commit -m "Update rockspec for v${VERSION} with SHA256"
-          git push origin main
+          git commit -m "Update rockspec for ${{ github.event.release.tag_name }} (SHA256)"
+          git push origin $DEFAULT_BRANCH
 
-      - name: Build `.src.rock`
-        run: |
-          luarocks pack rockspecs/lua-resty-aws-signature-*.rockspec
+      - name: Build .src.rock
+        run: luarocks pack rockspecs/lua-resty-aws-signature-*.rockspec
 
-      - name: Build Pre-compiled `.rock`
+      - name: Build pre-compiled .rock
         run: |
           luarocks make rockspecs/lua-resty-aws-signature-*.rockspec
           luarocks pack lua-resty-aws-signature
 
-      - name: Verify Rockspec
-        run: |
-          luarocks lint rockspecs/lua-resty-aws-signature-*.rockspec
+      - name: Lint rockspec
+        run: luarocks lint rockspecs/lua-resty-aws-signature-*.rockspec
 
       - name: Upload to LuaRocks
         run: |
