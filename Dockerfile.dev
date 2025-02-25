@@ -1,0 +1,12 @@
+FROM openresty/openresty:alpine-fat AS builder
+
+RUN luarocks install busted && \
+    luarocks install lua-resty-openssl
+
+WORKDIR /app
+
+COPY . /app
+
+ENV LUA_PATH="/app/src/?.lua;/app/src/?/init.lua;/usr/local/openresty/lualib/?.lua;;"
+
+CMD ["busted", "spec"]
