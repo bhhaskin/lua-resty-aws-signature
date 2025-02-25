@@ -134,7 +134,7 @@ jobs:
       ########################################################
       - name: Upload to LuaRocks
         run: |
-          luarocks upload lua-resty-aws-signature-*.src.rock --api-key=${{ secrets.LUAROCKS_API_KEY }}
+          luarocks upload rockspecs/lua-resty-aws-signature-*.rockspec --api-key=${{ secrets.LUAROCKS_API_KEY }}
           luarocks upload lua-resty-aws-signature-*.rock --api-key=${{ secrets.LUAROCKS_API_KEY }}
 
       ########################################################
