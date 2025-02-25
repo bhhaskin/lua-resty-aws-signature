@@ -2,7 +2,7 @@ name: Release Workflow
 
 on:
   release:
-    types: [published]
+    types: [published]  # Run when a new GitHub Release is published
 
 permissions:
   contents: write
@@ -12,22 +12,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      ########################################################
+      # (1) Check out the repo with full history
+      ########################################################
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # so we can create/push branches
+          fetch-depth: 0  # Allows us to create/push branches
 
+      ########################################################
+      # (2) Install dependencies: luarocks + curl
+      ########################################################
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y luarocks curl
 
+      ########################################################
+      # (3) Extract version from the release tag
+      #     e.g., "v0.1-1" -> "0.1-1"
+      ########################################################
       - name: Extract version
         run: |
-          VERSION=${{ github.event.release.tag_name }}   # e.g. "v0.1-1"
-          VERSION=${VERSION#v}                           # remove the "v" prefix -> "0.1-1"
+          VERSION=${{ github.event.release.tag_name }}  # e.g. "v0.1-1"
+          VERSION=${VERSION#v}                          # remove leading "v"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
+      ########################################################
+      # (4) Compute the tarball's SHA256 from GitHub
+      ########################################################
       - name: Compute SHA256
         run: |
           TARBALL_URL="https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.event.release.tag_name }}.tar.gz"
@@ -35,17 +48,22 @@ jobs:
           SHA256=$(curl -L "$TARBALL_URL" | sha256sum | awk '{ print $1 }')
           echo "SHA256=$SHA256" >> $GITHUB_ENV
 
+      ########################################################
+      # (5) Update the rockspec:
+      #     - Remove skip_validation
+      #     - Insert or replace sha256
+      ########################################################
       - name: Update rockspec
         run: |
           ROCKSPEC_FILE=$(ls rockspecs/lua-resty-aws-signature-*.rockspec)
 
-          # Remove the skip_validation line if it exists
+          # Remove any "skip_validation = true" line
           sed -i '/skip_validation *= *true/d' "$ROCKSPEC_FILE"
 
-          # Replace any 'md5 = ' line with 'sha256 = "<hash>",'
+          # Replace 'md5 = ...' with 'sha256 = "<hash>",' if found
           sed -i "s|md5 = .*|sha256 = \"${SHA256}\",|" "$ROCKSPEC_FILE" || true
 
-          # If a 'sha256 = ' line exists, replace it. Otherwise insert after 'url ='
+          # If 'sha256 = ' line already exists, replace it; else insert after 'url ='
           if grep -q 'sha256 = ' "$ROCKSPEC_FILE"; then
             sed -i "s|sha256 = .*|sha256 = \"${SHA256}\",|" "$ROCKSPEC_FILE"
           else
@@ -55,6 +73,9 @@ jobs:
           echo "== Final rockspec =="
           cat "$ROCKSPEC_FILE"
 
+      ########################################################
+      # (6) Commit changes to a new branch
+      ########################################################
       - name: Commit changes to new branch
         run: |
           git config user.name "github-actions[bot]"
@@ -63,36 +84,61 @@ jobs:
           git add rockspecs/lua-resty-aws-signature-*.rockspec
           git commit -m "Remove skip_validation, add sha256 for v${{ env.VERSION }}"
 
+      ########################################################
+      # (7) Push the new branch
+      ########################################################
       - name: Push to new branch
         run: |
           git push origin update-rockspec-${{ env.VERSION }}
 
+      ########################################################
+      # (8) Create a Pull Request (no rebase, use merge)
+      ########################################################
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: update-rockspec-${{ env.VERSION }}
           base: main
+          branch-suffix: timestamp  # Ensures a unique PR branch name each run
+          update-branch: false      # Disable rebasing or fast-forward merges
+          merge-method: "merge"     # Use a regular merge commit
           title: "Update rockspec for v${{ env.VERSION }} with SHA256"
           body: "Automatically generated PR to remove skip_validation and add sha256."
 
+      ########################################################
+      # (9) Build the .src.rock with the updated rockspec
+      ########################################################
       - name: Build .src.rock
         run: |
           luarocks pack rockspecs/lua-resty-aws-signature-*.rockspec
 
+      ########################################################
+      # (10) Build a precompiled .rock
+      ########################################################
       - name: Build precompiled .rock
         run: |
           luarocks make rockspecs/lua-resty-aws-signature-*.rockspec
           luarocks pack lua-resty-aws-signature
 
+      ########################################################
+      # (11) Lint the rockspec (optional but recommended)
+      ########################################################
       - name: Lint the rockspec
-        run: luarocks lint rockspecs/lua-resty-aws-signature-*.rockspec
+        run: |
+          luarocks lint rockspecs/lua-resty-aws-signature-*.rockspec
 
+      ########################################################
+      # (12) Upload to LuaRocks
+      ########################################################
       - name: Upload to LuaRocks
         run: |
           luarocks upload lua-resty-aws-signature-*.src.rock --api-key=${{ secrets.LUAROCKS_API_KEY }}
           luarocks upload lua-resty-aws-signature-*.rock --api-key=${{ secrets.LUAROCKS_API_KEY }}
 
+      ########################################################
+      # (13) Attach the .rock & .src.rock to the GitHub Release
+      ########################################################
       - name: Upload .rock & .src.rock to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
