@@ -16,95 +16,90 @@ The following Python script generates an AWS Signature V4 authorization header:
 import datetime
 import hashlib
 import hmac
+import os
 
 # AWS access keys
-access_key = 'ASIAUZABC123456'  
-secret_key = '5wfFi0FEaaaaacccc1111111111111'
+access_key = 'ASIAUZABC123456'
+secret_key = '5wfFi0FEaaaaacccc1111111111111/'
 
 # Request parameters
 method = 'GET'
-service = 'execute-api'
-host = 'myapi123.execute-api.us-east-1.amazonaws.com'
+service = 's3'
 region = 'us-east-1'
-endpoint = '/Prod/hello'
+bucket_name = 'my-bucket'
+object_key = 'test.txt'
 
-# Create a datetime object for signing (fixed time for testing consistency)
-t = datetime.datetime(2025, 2, 25, 15, 51, 54, tzinfo=datetime.timezone.utc)
+# Create request details
+host = f"{bucket_name}.s3.amazonaws.com"
+endpoint = f"/{object_key}"
+
+# Create a datetime object for signing
+t = datetime.datetime.utcnow()
 amzdate = t.strftime('%Y%m%dT%H%M%SZ')
 datestamp = t.strftime('%Y%m%d')
 
-# **Step 1: Create the Canonical Request**
-# S3 requires x-amz-content-sha256 (even for GET)
-payload_hash = hashlib.sha256(''.encode('utf-8')).hexdigest()
+# Compute payload hash (SHA-256 of an empty string)
+payload_hash = hashlib.sha256(b'').hexdigest()
 
-# Canonical headers (Only required headers: 'host' for general, 'x-amz-content-sha256' for S3)
-canonical_headers = f'host:{host}\n'
-signed_headers = 'host'
-
-# **Include x-amz-content-sha256 for S3**
-if service == 's3':
-    canonical_headers += f'x-amz-content-sha256:{payload_hash}\n'
-    signed_headers += ';x-amz-content-sha256'
-
-# Canonical Request
+# Create the canonical request
 canonical_uri = endpoint
 canonical_querystring = ''
+canonical_headers = (f"host:{host}\n"
+                     f"x-amz-content-sha256:{payload_hash}\n"
+                     f"x-amz-date:{amzdate}\n")
+signed_headers = "host;x-amz-content-sha256;x-amz-date"
+
 canonical_request = (method + '\n' + canonical_uri + '\n' + canonical_querystring + '\n'
                      + canonical_headers + '\n' + signed_headers + '\n' + payload_hash)
 
-# Debug Output: Canonical Request
-print("\n========== Canonical Request (Python) ==========")
-print(canonical_request)
-print("=======================================")
-
-# Compute Canonical Request Hash
-canonical_request_hash = hashlib.sha256(canonical_request.encode('utf-8')).hexdigest()
-print("\nCanonical Request Hash:", canonical_request_hash)
-
-# **Step 2: Create the String to Sign**
+# Create the string to sign
 algorithm = 'AWS4-HMAC-SHA256'
-credential_scope = f'{datestamp}/{region}/{service}/aws4_request'
-string_to_sign = (algorithm + '\n' + amzdate + '\n' + credential_scope + '\n' + canonical_request_hash)
+credential_scope = f"{datestamp}/{region}/{service}/aws4_request"
+string_to_sign = (algorithm + '\n' + amzdate + '\n' + credential_scope + '\n' +
+                  hashlib.sha256(canonical_request.encode('utf-8')).hexdigest())
 
-# Debug Output: String to Sign
-print("\n========== String to Sign ==========")
-print(string_to_sign)
-print("===================================")
-
-# **Step 3: Compute the Signing Key**
 def sign(key, msg):
     return hmac.new(key, msg.encode("utf-8"), hashlib.sha256).digest()
 
-# Derive the signing key
-kDate = sign(("AWS4" + secret_key).encode("utf-8"), datestamp)
-kRegion = sign(kDate, region)
-kService = sign(kRegion, service)
-kSigning = sign(kService, "aws4_request")
+def getSignatureKey(key, dateStamp, regionName, serviceName):
+    kDate = sign(("AWS4" + key).encode("utf-8"), dateStamp)
+    kRegion = sign(kDate, regionName)
+    kService = sign(kRegion, serviceName)
+    kSigning = sign(kService, "aws4_request")
+    return kSigning
 
-# Debug Output: Signing Key Derivation
-print("\n========== Signing Key (Hex) ==========")
-print("K_DATE:", kDate.hex())
-print("K_REGION:", kRegion.hex())
-print("K_SERVICE:", kService.hex())
-print("K_SIGNING:", kSigning.hex())
-print("===================================")
+# Generate the signature
+signing_key = getSignatureKey(secret_key, datestamp, region, service)
+signature = hmac.new(signing_key, string_to_sign.encode('utf-8'), hashlib.sha256).hexdigest()
 
-# **Step 4: Compute the Signature**
-signature = hmac.new(kSigning, string_to_sign.encode('utf-8'), hashlib.sha256).hexdigest()
+# Construct authorization header
+authorization_header = (f"{algorithm} Credential={access_key}/{credential_scope}, "
+                        f"SignedHeaders={signed_headers}, Signature={signature}")
 
-# Debug Output: Computed Signature
-print("\n========== Computed Signature ==========")
-print(signature)
-print("===================================")
+# Debug Output with Spacers
+def print_section(title, content):
+    print("\n" + "=" * 50)
+    print(f"{title}")
+    print("=" * 50)
+    print(content)
 
-# **Step 5: Construct Authorization Header**
-authorization_header = (algorithm + ' ' + 'Credential=' + access_key + '/' + credential_scope + ', ' +
-                        'SignedHeaders=' + signed_headers + ', ' + 'Signature=' + signature)
+# Print debug information with section headers
+print_section("REQUEST DETAILS", f"Request URL: https://{host}{canonical_uri}\nMethod: {method}")
 
-# Debug Output: Authorization Header
-print("\n========== Authorization Header ==========")
-print(authorization_header)
-print("===================================")
+print_section("CANONICAL REQUEST", canonical_request)
+
+print_section("STRING TO SIGN", string_to_sign)
+
+print_section("GENERATED SIGNATURE", signature)
+
+print_section("AUTHORIZATION HEADER", authorization_header)
+
+print_section("HEADERS", f"""
+Host: {host}
+x-amz-date: {amzdate}
+x-amz-content-sha256: {payload_hash}
+Authorization: {authorization_header}
+""")
 ```
 
 ## Using the Generated Signature
