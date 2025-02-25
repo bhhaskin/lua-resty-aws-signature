@@ -39,19 +39,19 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       ########################################################
-      # (4) Compute the tarball's SHA256 from GitHub
+      # (4) Compute the tarball's MD5 from GitHub
       ########################################################
-      - name: Compute SHA256
+      - name: Compute MD5
         run: |
           TARBALL_URL="https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.event.release.tag_name }}.tar.gz"
           echo "Downloading tarball from $TARBALL_URL"
-          SHA256=$(curl -L "$TARBALL_URL" | sha256sum | awk '{ print $1 }')
-          echo "SHA256=$SHA256" >> $GITHUB_ENV
+          MD5=$(curl -L "$TARBALL_URL" | md5sum | awk '{ print $1 }')
+          echo "MD5=$MD5" >> $GITHUB_ENV
 
       ########################################################
       # (5) Update the rockspec:
       #     - Remove skip_validation
-      #     - Insert or replace sha256
+      #     - Insert or replace md5
       ########################################################
       - name: Update rockspec
         run: |
@@ -60,14 +60,15 @@ jobs:
           # Remove any "skip_validation = true" line
           sed -i '/skip_validation *= *true/d' "$ROCKSPEC_FILE"
 
-          # Replace 'md5 = ...' with 'sha256 = "<hash>",' if found
-          sed -i "s|md5 = .*|sha256 = \"${SHA256}\",|" "$ROCKSPEC_FILE" || true
+          # Replace 'sha256 = ...' or 'md5 = ...' with 'md5 = "<hash>",' if found
+          sed -i "s|sha256 = .*|md5 = \"${MD5}\",|" "$ROCKSPEC_FILE" || true
+          sed -i "s|md5 = .*|md5 = \"${MD5}\",|" "$ROCKSPEC_FILE" || true
 
-          # If 'sha256 = ' line already exists, replace it; else insert after 'url ='
-          if grep -q 'sha256 = ' "$ROCKSPEC_FILE"; then
-            sed -i "s|sha256 = .*|sha256 = \"${SHA256}\",|" "$ROCKSPEC_FILE"
+          # If 'md5 = ' line already exists, replace it; else insert after 'url ='
+          if grep -q 'md5 = ' "$ROCKSPEC_FILE"; then
+            sed -i "s|md5 = .*|md5 = \"${MD5}\",|" "$ROCKSPEC_FILE"
           else
-            sed -i "/url = .*/a\\    sha256 = \"${SHA256}\"," "$ROCKSPEC_FILE"
+            sed -i "/url = .*/a\\    md5 = \"${MD5}\"," "$ROCKSPEC_FILE"
           fi
 
           echo "== Final rockspec =="
@@ -82,7 +83,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b update-rockspec-${{ env.VERSION }}
           git add rockspecs/lua-resty-aws-signature-*.rockspec
-          git commit -m "Remove skip_validation, add sha256 for v${{ env.VERSION }}"
+          git commit -m "Remove skip_validation, add md5 for v${{ env.VERSION }}"
 
       ########################################################
       # (7) Push the new branch
@@ -103,8 +104,8 @@ jobs:
           branch-suffix: timestamp  # Ensures a unique PR branch name each run
           update-branch: false      # Disable rebasing or fast-forward merges
           merge-method: "merge"     # Use a regular merge commit
-          title: "Update rockspec for v${{ env.VERSION }} with SHA256"
-          body: "Automatically generated PR to remove skip_validation and add sha256."
+          title: "Update rockspec for v${{ env.VERSION }} with MD5"
+          body: "Automatically generated PR to remove skip_validation and add md5."
 
       ########################################################
       # (9) Build the .src.rock with the updated rockspec
