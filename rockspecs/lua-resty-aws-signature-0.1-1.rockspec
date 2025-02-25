@@ -2,7 +2,8 @@ package = "lua-resty-aws-signature"
 version = "0.1-1"
 source = {
    url = "https://github.com/bhhaskin/lua-resty-aws-signature/archive/refs/tags/v0.1-1.tar.gz",
-   skip_validation = true
+   skip_validation = true,
+   dir = "lua-resty-aws-signature-0.1-1"
 }
 description = {
    summary  = "AWS signature V4 library for OpenResty ",
