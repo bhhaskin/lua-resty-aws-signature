@@ -119,7 +119,7 @@ jobs:
       ########################################################
       - name: Build precompiled .rock
         run: |
-          luarocks make rockspecs/lua-resty-aws-signature-*.rockspec
+          luarocks make --local rockspecs/lua-resty-aws-signature-*.rockspec
           luarocks pack lua-resty-aws-signature
 
       ########################################################
