@@ -2,7 +2,7 @@ name: Release Workflow
 
 on:
   release:
-    types: [published] 
+    types: [published]
 
 permissions:
   contents: write
@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Check out code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -22,13 +22,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y luarocks curl
 
-      - name: Extract version from tag
+      - name: Extract version
         run: |
-          VERSION=${{ github.event.release.tag_name }}  # e.g., "v0.1-1"
-          VERSION=${VERSION#v}                          # remove the "v" prefix -> "0.1-1"
+          VERSION=${{ github.event.release.tag_name }}   # e.g. "v0.1-1"
+          VERSION=${VERSION#v}                           # Remove "v" -> "0.1-1"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Compute SHA256 of tarball
+      - name: Compute SHA256
         run: |
           TARBALL_URL="https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.event.release.tag_name }}.tar.gz"
           echo "Downloading tarball from $TARBALL_URL"
@@ -38,36 +38,42 @@ jobs:
       - name: Update rockspec
         run: |
           ROCKSPEC_FILE=$(ls rockspecs/lua-resty-aws-signature-*.rockspec)
-          # Replace the 'url' and 'sha256' lines
           sed -i "s|url = .*|url = \"https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.event.release.tag_name }}.tar.gz\",|" "$ROCKSPEC_FILE"
+          # Try replacing md5 first; if missing, no worries
           sed -i "s|md5 = .*|sha256 = \"$SHA256\",|" "$ROCKSPEC_FILE" || true
+          # Replace any existing sha256 line
           sed -i "s|sha256 = .*|sha256 = \"$SHA256\",|" "$ROCKSPEC_FILE"
-          cat "$ROCKSPEC_FILE"
 
-      - name: Determine default branch
-        id: branch
+      - name: Commit changes to new branch
         run: |
-          DEFAULT_BRANCH=$(git remote show origin | awk '/HEAD branch/ {print $NF}')
-          echo "DEFAULT_BRANCH=$DEFAULT_BRANCH" >> $GITHUB_ENV
-
-      - name: Commit updated rockspec
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout $DEFAULT_BRANCH
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b update-rockspec-${{ env.VERSION }}
           git add rockspecs/lua-resty-aws-signature-*.rockspec
-          git commit -m "Update rockspec for ${{ github.event.release.tag_name }} (SHA256)"
-          git push origin $DEFAULT_BRANCH
+          git commit -m "Update rockspec for v${{ env.VERSION }} (SHA256)"
+
+      - name: Push to new branch
+        run: |
+          git push origin update-rockspec-${{ env.VERSION }}
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: update-rockspec-${{ env.VERSION }}
+          base: main
+          title: "Update rockspec for v${{ env.VERSION }} (SHA256)"
+          body: "Automatically generated PR to update rockspec and fix source tarball SHA256."
 
       - name: Build .src.rock
         run: luarocks pack rockspecs/lua-resty-aws-signature-*.rockspec
 
-      - name: Build pre-compiled .rock
+      - name: Build .rock (pre-compiled)
         run: |
           luarocks make rockspecs/lua-resty-aws-signature-*.rockspec
           luarocks pack lua-resty-aws-signature
 
-      - name: Lint rockspec
+      - name: Lint
         run: luarocks lint rockspecs/lua-resty-aws-signature-*.rockspec
 
       - name: Upload to LuaRocks
@@ -75,7 +81,7 @@ jobs:
           luarocks upload lua-resty-aws-signature-*.src.rock --api-key=${{ secrets.LUAROCKS_API_KEY }}
           luarocks upload lua-resty-aws-signature-*.rock --api-key=${{ secrets.LUAROCKS_API_KEY }}
 
-      - name: Upload .rock & .src.rock to GitHub Release
+      - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
