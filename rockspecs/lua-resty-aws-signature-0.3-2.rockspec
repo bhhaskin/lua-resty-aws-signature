@@ -2,7 +2,7 @@ package = "lua-resty-aws-signature"
 version = "0.3-2"
 source = {
    url = "https://github.com/bhhaskin/lua-resty-aws-signature/archive/refs/tags/v0.3-2.tar.gz",
-    md5 = "b42edf2b0363f83c2ebb4e97b86142e5",
+    md5 = "9f5989aa59fbcba26e5254e6bdb3cb6a",
    dir = "lua-resty-aws-signature-0.3-2"
 }
 description = {
