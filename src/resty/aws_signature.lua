@@ -41,22 +41,16 @@ local _M = {
   end
   
   local function aws_uri_encode(path)
-    -- Characters that may appear unescaped in the canonical URI
     local safe = "[A-Za-z0-9._~-]"
 
-    local function encode_byte(c)
+    local function enc(c)          -- %HH in upper‑case hex
         return string.format("%%%02X", string.byte(c))
     end
 
-    -- Encode every segment but preserve the '/' separators
-    local encoded = path:gsub("([^/]+)", function(segment)
-        -- 1st pass: encode everything except the safe set
-        segment = segment:gsub("([^" .. safe .. "])", encode_byte)
-        -- 2nd pass: encode every '%' that was introduced above
-        return segment:gsub("%%", "%%25")
+    -- Encode each path segment but keep "/" separators intact
+    return path:gsub("([^/]+)", function(segment)
+        return segment:gsub("([^" .. safe .. "])", enc)
     end)
-
-    return encoded
   end
 
   -- Function to generate AWS Signature v4 headers
