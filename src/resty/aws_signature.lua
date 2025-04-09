@@ -40,10 +40,29 @@ local _M = {
       return hmac_sha256(k_service, "aws4_request")
   end
   
+  local function aws_uri_encode(path)
+    -- Characters that may appear unescaped in the canonical URI
+    local safe = "[A-Za-z0-9._~-]"
+
+    local function encode_byte(c)
+        return string.format("%%%02X", string.byte(c))
+    end
+
+    -- Encode every segment but preserve the '/' separators
+    local encoded = path:gsub("([^/]+)", function(segment)
+        -- 1st pass: encode everything except the safe set
+        segment = segment:gsub("([^" .. safe .. "])", encode_byte)
+        -- 2nd pass: encode every '%' that was introduced above
+        return segment:gsub("%%", "%%25")
+    end)
+
+    return encoded
+  end
+
   -- Function to generate AWS Signature v4 headers
   function _M.sign_request(opts)
       local method = opts.method or "GET"
-      local uri = opts.uri or "/"
+      local uri = aws_uri_encode(opts.uri or "/")
       local query_string = opts.query_string or ""
       local headers = opts.headers or {}
       local payload = opts.payload or ""
